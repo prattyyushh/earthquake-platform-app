@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Global Earthquake Monitoring and Risk Analysis Platform</title>
+<script src="../backend/node_modules/chart.js/dist/chart.umd.js"></script>
+<script src="../backend/node_modules/globe.gl/dist/globe.gl.min.js"></script>
+<style>
+  :root {
+    --navy: #1F3864; --accent: #2E74B5; --bg: #F4F6F9; --card: #FFFFFF;
+    --border: #E1E5EB; --text: #22272E; --muted: #6B7280;
+    --severe: #C0392B; --high: #E67E22; --moderate: #F1C40F; --low: #27AE60;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--text); }
+  header { background:var(--navy); color:#fff; padding:16px 24px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }
+  header h1 { font-size:18px; margin:0; }
+  header .sub { font-size:12px; opacity:0.8; }
+  #authBox { display:flex; gap:8px; align-items:center; font-size:13px; }
+  #authBox input { padding:6px 8px; border-radius:4px; border:none; font-size:13px; width:120px; }
+  #authBox select { padding:6px; border-radius:4px; border:none; font-size:13px; }
+  button { cursor:pointer; border:none; border-radius:4px; padding:7px 14px; font-size:13px; background:var(--accent); color:#fff; }
+  button:hover { opacity:0.9; }
+  button.secondary { background:#fff; color:var(--navy); border:1px solid var(--border); }
+  button.danger { background:var(--severe); }
+  nav { display:flex; gap:4px; padding:10px 24px; background:#fff; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  nav button { background:transparent; color:var(--muted); font-weight:600; padding:8px 14px; }
+  nav button.active { background:var(--navy); color:#fff; }
+  main { padding:24px; max-width:1200px; margin:0 auto; }
+  .tab { display:none; }
+  .tab.active { display:block; }
+  .cards { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:14px; margin-bottom:20px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:16px; }
+  .card .label { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; }
+  .card .value { font-size:26px; font-weight:700; color:var(--navy); margin-top:4px; }
+  .charts { display:grid; grid-template-columns: repeat(auto-fit, minmax(320px,1fr)); gap:16px; margin-bottom:24px; }
+  .chartBox { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:16px; height:300px; }
+  table { width:100%; border-collapse:collapse; background:var(--card); border-radius:8px; overflow:hidden; font-size:13px; }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--border); }
+  th { background:var(--navy); color:#fff; font-weight:600; }
+  tr:hover td { background:#FAFBFD; }
+  .badge { padding:3px 9px; border-radius:20px; font-size:11px; font-weight:700; color:#fff; }
+  .badge.Severe { background:var(--severe); } .badge.High { background:var(--high); }
+  .badge.Moderate { background:var(--moderate); color:#333; } .badge.Low { background:var(--low); }
+  .panel { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:18px; margin-bottom:20px; }
+  .panel h3 { margin-top:0; color:var(--navy); }
+  .formRow { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .formRow input, .formRow select { padding:8px; border:1px solid var(--border); border-radius:4px; font-size:13px; }
+  .msg { padding:10px; border-radius:6px; margin:10px 0; font-size:13px; }
+  .msg.ok { background:#E8F6EE; color:#1B7A43; }
+  .msg.err { background:#FDEDEC; color:#A93226; }
+  .hidden { display:none !important; }
+  .muted { color:var(--muted); font-size:12px; }
+  #globeContainer { width:100%; height:600px; background:#050b18; border-radius:10px; overflow:hidden; }
+  .globeLayout { display:grid; grid-template-columns:minmax(0, 2fr) minmax(240px, 1fr); gap:16px; }
+  #globeDetails { min-height:180px; }
+  @media(max-width:750px) { .globeLayout { grid-template-columns:1fr; } #globeContainer { height:420px; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🌍 Global Earthquake Monitoring &amp; Risk Analysis Platform</h1>
+    <div class="sub">DA3 — Live Demo Dashboard</div>
+  </div>
+  <div id="authBox">
+    <span id="whoami" class="muted"></span>
+    <div id="loginForm">
+      <input id="loginEmail" placeholder="email" value="priya@example.com">
+      <input id="loginPassword" type="password" placeholder="password" value="admin123">
+      <button onclick="login()">Log in</button>
+      <span class="muted">Admin demo account — see README for the other 3 role logins</span>
+    </div>
+    <button id="logoutBtn" class="secondary hidden" onclick="logout()">Log out</button>
+  </div>
+</header>
+
+<nav id="tabNav">
+  <button data-tab="dashboard" class="active" onclick="showTab('dashboard')">📊 Dashboard</button>
+<button data-tab="globe" onclick="showTab('globe')">🌍 Earthquake Globe</button>
+  <button data-tab="earthquakes" onclick="showTab('earthquakes')">🌐 Earthquakes</button>
+  <button data-tab="reports" onclick="showTab('reports')">📈 Reports</button>
+  <button data-tab="views" onclick="showTab('views')">🔎 Views</button>
+  <button data-tab="admin" onclick="showTab('admin')">🔐 Admin / Responder</button>
+  <button data-tab="register" onclick="showTab('register')">➕ Register</button>
+</nav>
+
+<main>
+
+  <!-- GLOBE -->
+  <div class="tab" id="tab-globe">
+    <div class="panel">
+      <h3>🌍 Global Earthquake Globe</h3>
+      <p class="muted">Explore earthquake locations. Select a marker to view event details. Marker size increases with magnitude.</p>
+      <div class="cards" id="globeStats"></div>
+      <div class="globeLayout">
+        <div id="globeContainer"></div>
+        <div class="panel" id="globeDetails">
+          <h3>Earthquake details</h3>
+          <p class="muted">Select an earthquake marker on the globe.</p>
+        </div>
+      </div>
+      <p class="muted" id="globeStatus">Preparing globe...</p>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="tab active" id="tab-dashboard">
+    <div class="cards" id="statCards"></div>
+    <div class="charts">
+      <div class="chartBox"><canvas id="chartMagDist"></canvas></div>
+      <div class="chartBox"><canvas id="chartByRegion"></canvas></div>
+      <div class="chartBox"><canvas id="chartResources"></canvas></div>
+    </div>
+  </div>
+
+  <!-- EARTHQUAKES -->
+  <div class="tab" id="tab-earthquakes">
+    <div class="panel">
+      <h3>Search / Filter</h3>
+      <div class="formRow">
+        <input id="filterMinMag" placeholder="Min magnitude" type="number" step="0.1">
+        <select id="filterRegion"><option value="">All regions</option></select>
+        <button onclick="loadEarthquakes()">Search</button>
+        <button class="secondary" onclick="document.getElementById('filterMinMag').value='';document.getElementById('filterRegion').value='';loadEarthquakes()">Clear</button>
+      </div>
+    </div>
+    <div class="panel hidden" id="addQuakePanel">
+      <h3>Add Earthquake (Admin / Researcher)</h3>
+      <div class="formRow">
+        <input id="newDateTime" type="datetime-local">
+        <input id="newMagnitude" placeholder="Magnitude" type="number" step="0.1">
+        <input id="newDepth" placeholder="Depth (km)" type="number" step="0.1">
+        <input id="newLat" placeholder="Latitude" type="number" step="0.000001">
+        <input id="newLng" placeholder="Longitude" type="number" step="0.000001">
+        <select id="newRegion"></select>
+        <button onclick="addEarthquake()">Add</button>
+      </div>
+      <div id="addMsg"></div>
+    </div>
+    <table>
+      <thead><tr><th>ID</th><th>Date/Time</th><th>Mag</th><th>Depth (km)</th><th>Region</th><th>Country</th><th>Actions</th></tr></thead>
+      <tbody id="quakeTable"></tbody>
+    </table>
+  </div>
+
+  <!-- REPORTS -->
+  <div class="tab" id="tab-reports">
+    <div class="panel">
+      <h3>Region Risk (JOIN across RISK_ASSESSMENT, REGION, COUNTRY)</h3>
+      <table><thead><tr><th>Region</th><th>Country</th><th>Risk Score</th><th>Level</th></tr></thead><tbody id="riskTable"></tbody></table>
+    </div>
+    <div class="panel">
+      <h3>Regions Above Average Risk (Nested Query)</h3>
+      <ul id="aboveAvgList"></ul>
+    </div>
+    <div class="panel">
+      <h3>Event Count &amp; Avg Magnitude by Region (Aggregate)</h3>
+      <table><thead><tr><th>Region</th><th>Event Count</th><th>Avg Magnitude</th></tr></thead><tbody id="statsTable"></tbody></table>
+    </div>
+  </div>
+
+  <!-- VIEWS -->
+  <div class="tab" id="tab-views">
+    <div class="panel">
+      <h3>vw_earthquake_overview</h3>
+      <table><thead><tr><th>ID</th><th>Date/Time</th><th>Mag</th><th>Depth</th><th>Region</th><th>Country</th></tr></thead><tbody id="viewOverview"></tbody></table>
+    </div>
+    <div class="panel">
+      <h3>vw_high_risk_regions</h3>
+      <table><thead><tr><th>Region</th><th>Country</th><th>Score</th><th>Level</th></tr></thead><tbody id="viewHighRisk"></tbody></table>
+    </div>
+  </div>
+
+  <!-- ADMIN -->
+  <div class="tab" id="tab-admin">
+    <div id="adminLocked" class="panel">
+      <p class="muted">Log in as an Admin or Responder account to access resource allocation and the audit log.</p>
+    </div>
+    <div id="adminUnlocked" class="hidden">
+      <div class="panel">
+        <h3>Allocate Emergency Resource (calls stored procedure sp_allocate_resource)</h3>
+        <div class="formRow">
+          <select id="allocResource"></select>
+          <select id="allocEarthquake"></select>
+          <input id="allocQty" type="number" placeholder="Quantity">
+          <button onclick="allocateResource()">Allocate</button>
+        </div>
+        <div id="allocMsg"></div>
+      </div>
+      <div class="panel" id="auditPanel">
+        <h3>Audit Log (Admin only — trigger-populated)</h3>
+        <table><thead><tr><th>Log ID</th><th>Earthquake</th><th>Magnitude</th><th>Logged At</th><th>Note</th></tr></thead><tbody id="auditTable"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- REGISTER -->
+  <div class="tab" id="tab-register">
+    <div class="panel" style="max-width:420px;">
+      <h3>Create an account</h3>
+      <div class="formRow" style="flex-direction:column;">
+        <input id="regName" placeholder="Full name">
+        <input id="regEmail" placeholder="Email">
+        <input id="regPassword" type="password" placeholder="Password">
+        <select id="regRole">
+          <option value="Public">Public</option>
+          <option value="Researcher">Researcher</option>
+          <option value="Responder">Responder</option>
+          <option value="Admin">Admin</option>
+        </select>
+        <button onclick="registerUser()">Register</button>
+      </div>
+      <div id="regMsg"></div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const API = 'http://localhost:4000/api';
+let TOKEN = localStorage.getItem('eq_token') || null;
+let ME = JSON.parse(localStorage.getItem('eq_user') || 'null');
+let charts = {};
+
+function authHeaders() { return TOKEN ? { 'Authorization': 'Bearer ' + TOKEN } : {}; }
+
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelector('nav button[data-tab="' + name + '"]').classList.add('active');
+  if (name === 'dashboard') loadDashboard();
+  if (name === 'globe') loadEarthquakeGlobe();
+  if (name === 'earthquakes') { loadRegionsDropdown(); loadEarthquakes(); }
+  if (name === 'reports') loadReports();
+  if (name === 'views') loadViews();
+  if (name === 'admin') loadAdmin();
+}
+
+function updateAuthUI() {
+  const whoami = document.getElementById('whoami');
+  const loginForm = document.getElementById('loginForm');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const addPanel = document.getElementById('addQuakePanel');
+  if (ME) {
+    whoami.textContent = ME.name + ' (' + ME.role + ')';
+    loginForm.classList.add('hidden');
+    logoutBtn.classList.remove('hidden');
+    if (ME.role === 'Admin' || ME.role === 'Researcher') addPanel.classList.remove('hidden');
+    else addPanel.classList.add('hidden');
+  } else {
+    whoami.textContent = '';
+    loginForm.classList.remove('hidden');
+    logoutBtn.classList.add('hidden');
+    addPanel.classList.add('hidden');
+  }
+}
+
+async function login() {
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+  try {
+    const res = await fetch(API + '/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email,password}) });
+    const data = await res.json();
+    if (!res.ok) { alert('Login failed: ' + data.error); return; }
+    TOKEN = data.token; ME = data.user;
+    localStorage.setItem('eq_token', TOKEN); localStorage.setItem('eq_user', JSON.stringify(ME));
+    updateAuthUI();
+  } catch (e) { alert('Could not reach API — is the backend running on :4000?'); }
+}
+function logout() { TOKEN=null; ME=null; localStorage.removeItem('eq_token'); localStorage.removeItem('eq_user'); updateAuthUI(); }
+
+async function registerUser() {
+  const body = {
+    name: document.getElementById('regName').value,
+    email: document.getElementById('regEmail').value,
+    password: document.getElementById('regPassword').value,
+    role: document.getElementById('regRole').value,
+  };
+  const res = await fetch(API + '/auth/register', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const data = await res.json();
+  const msg = document.getElementById('regMsg');
+  if (res.ok) { msg.innerHTML = '<div class="msg ok">Registered! You can now log in with this email/password.</div>'; }
+  else { msg.innerHTML = '<div class="msg err">' + (data.error || 'Registration failed') + '</div>'; }
+}
+
+async function loadDashboard() {
+  const res = await fetch(API + '/dashboard/stats');
+  const d = await res.json();
+  document.getElementById('statCards').innerHTML = `
+    <div class="card"><div class="label">Total Earthquakes</div><div class="value">${d.totals.total}</div></div>
+    <div class="card"><div class="label">Avg Magnitude</div><div class="value">${d.totals.avgMag}</div></div>
+    <div class="card"><div class="label">Max Magnitude</div><div class="value">${d.totals.maxMag}</div></div>
+  `;
+  const ctx1 = document.getElementById('chartMagDist');
+  if (charts.magDist) charts.magDist.destroy();
+  charts.magDist = new Chart(ctx1, { type:'bar', data:{
+    labels: d.magnitudeDist.map(r => 'M' + r.magBucket + '+'),
+    datasets: [{ label:'Earthquakes', data: d.magnitudeDist.map(r=>r.count), backgroundColor:'#2E74B5' }]
+  }, options:{ plugins:{title:{display:true,text:'Magnitude Distribution'}}, responsive:true, maintainAspectRatio:false }});
+
+  const ctx2 = document.getElementById('chartByRegion');
+  if (charts.byRegion) charts.byRegion.destroy();
+  charts.byRegion = new Chart(ctx2, { type:'bar', data:{
+    labels: d.byRegion.map(r=>r.RegionName),
+    datasets:[{ label:'Events', data: d.byRegion.map(r=>r.count), backgroundColor:'#1F3864' }]
+  }, options:{ indexAxis:'y', plugins:{title:{display:true,text:'Events by Region'}}, responsive:true, maintainAspectRatio:false }});
+
+  const ctx3 = document.getElementById('chartResources');
+  if (charts.resources) charts.resources.destroy();
+  charts.resources = new Chart(ctx3, { type:'doughnut', data:{
+    labels: d.byResourceType.map(r=>r.ResourceType),
+    datasets:[{ data: d.byResourceType.map(r=>r.total), backgroundColor:['#2E74B5','#E67E22','#27AE60','#C0392B','#8E44AD'] }]
+  }, options:{ plugins:{title:{display:true,text:'Resources Allocated by Type'}}, responsive:true, maintainAspectRatio:false }});
+}
+
+
+let earthquakeGlobe = null;
+let globeResizeHandler = null;
+
+async function loadEarthquakeGlobe() {
+  const status = document.getElementById('globeStatus');
+  const container = document.getElementById('globeContainer');
+
+  if (typeof Globe !== 'function') {
+    status.textContent = 'Globe library did not load. Check the browser console.';
+    return;
+  }
+
+  try {
+    const response = await fetch(API + '/earthquakes');
+    if (!response.ok) throw new Error('Earthquake API returned HTTP ' + response.status);
+    const rows = await response.json();
+
+    const quakes = rows.filter(q =>
+      Number.isFinite(Number(q.Latitude)) &&
+      Number.isFinite(Number(q.Longitude))
+    ).map(q => ({
+      ...q,
+      lat: Number(q.Latitude),
+      lng: Number(q.Longitude),
+      mag: Number(q.Magnitude)
+    }));
+
+    document.getElementById('globeStats').innerHTML = `
+      <div class="card"><div class="label">Mapped earthquakes</div><div class="value">${quakes.length}</div></div>
+      <div class="card"><div class="label">Largest magnitude</div><div class="value">${quakes.length ? Math.max(...quakes.map(q => q.mag)).toFixed(1) : '—'}</div></div>
+      <div class="card"><div class="label">Countries represented</div><div class="value">${new Set(quakes.map(q => q.CountryName).filter(Boolean)).size}</div></div>
+    `;
+
+    if (!earthquakeGlobe) {
+      earthquakeGlobe = Globe()(container)
+        .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+        .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
+        .showAtmosphere(true)
+        .atmosphereColor('#5b9dff')
+        .atmosphereAltitude(0.18)
+        .pointsData(quakes)
+        .pointLat('lat')
+        .pointLng('lng')
+        .pointAltitude(q => 0.015 + Math.max(0, q.mag - 5) * 0.012)
+        .pointRadius(q => 0.25 + Math.max(0, q.mag - 5) * 0.12)
+        .pointColor(q => q.mag >= 8 ? '#ff3030' : q.mag >= 7 ? '#ff8c42' : q.mag >= 6 ? '#ffd166' : '#4ade80')
+        .pointLabel(q => `
+          <div style="background:#101827;color:white;padding:10px;border-radius:8px">
+            <strong>${q.CountryName || 'Unknown country'} — M${q.mag.toFixed(1)}</strong><br>
+            ${q.RegionName || 'Unknown region'}
+          </div>
+        `)
+        .onPointClick(q => {
+          document.getElementById('globeDetails').innerHTML = `
+            <h3>Earthquake #${q.EarthquakeID}</h3>
+            <p><strong>Country:</strong> ${q.CountryName || 'Unknown'}</p>
+            <p><strong>Region:</strong> ${q.RegionName || 'Unknown'}</p>
+            <p><strong>Magnitude:</strong> M${q.mag.toFixed(1)} (${q.MagnitudeType || 'unknown type'})</p>
+            <p><strong>Depth:</strong> ${q.Depth_km} km</p>
+            <p><strong>Date:</strong> ${new Date(q.EventDateTime).toLocaleString()}</p>
+            <p><strong>Coordinates:</strong> ${q.lat.toFixed(3)}, ${q.lng.toFixed(3)}</p>
+          `;
+        });
+
+      earthquakeGlobe.controls().autoRotate = true;
+      earthquakeGlobe.controls().autoRotateSpeed = 0.35;
+
+      // COUNTRY_POLYGONS_INTEGRATION
+      fetch('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson')
+        .then(response => {
+          if (!response.ok) throw new Error('Country data request failed');
+          return response.json();
+        })
+        .then(data => {
+          const countries = data.features || [];
+
+          earthquakeGlobe
+            .polygonsData(countries)
+            .polygonCapColor(() => 'rgba(46, 116, 181, 0.12)')
+            .polygonSideColor(() => 'rgba(31, 56, 100, 0.15)')
+            .polygonStrokeColor(() => '#7cc7ff')
+            .polygonAltitude(0.006)
+            .polygonLabel(country =>
+              country.properties.ADMIN || country.properties.NAME || 'Country'
+            )
+            .onPolygonClick(country => {
+              const name = country.properties.ADMIN || country.properties.NAME || 'Unknown';
+              const matches = quakes.filter(q =>
+                (q.CountryName || '').toLowerCase() === name.toLowerCase()
+              );
+              const average = matches.length
+                ? (matches.reduce((sum, q) => sum + Number(q.mag), 0) / matches.length).toFixed(2)
+                : 'N/A';
+              const maximum = matches.length
+                ? Math.max(...matches.map(q => Number(q.mag))).toFixed(1)
+                : 'N/A';
+
+              document.getElementById('globeDetails').innerHTML = `
+                <h3>${name}</h3>
+                <p><strong>Recorded earthquakes:</strong> ${matches.length}</p>
+                <p><strong>Average magnitude:</strong> ${average}</p>
+                <p><strong>Maximum magnitude:</strong> ${maximum}</p>
+                ${matches.length
+                  ? '<h4>Recorded events</h4>' + matches.map(q =>
+                    `<p>M${Number(q.mag).toFixed(1)} — ${q.RegionName || 'Unknown region'}<br>
+                    <small>${new Date(q.EventDateTime).toLocaleString()}</small></p>`
+                  ).join('')
+                  : '<p>No matching earthquakes in the current database.</p>'}
+              `;
+            });
+        })
+        .catch(error => {
+          console.warn('Country borders could not be loaded:', error);
+        });
+
+      earthquakeGlobe.pointOfView({ lat: 20, lng: 65, altitude: 2.2 }, 1000);
+
+      globeResizeHandler = () => {
+        if (earthquakeGlobe && container.clientWidth > 0) {
+          earthquakeGlobe.width(container.clientWidth);
+          earthquakeGlobe.height(container.clientHeight);
+        }
+      };
+      window.addEventListener('resize', globeResizeHandler);
+    } else {
+      earthquakeGlobe.pointsData(quakes);
+    }
+
+    requestAnimationFrame(() => {
+      if (earthquakeGlobe && container.clientWidth > 0) {
+        earthquakeGlobe.width(container.clientWidth);
+        earthquakeGlobe.height(container.clientHeight);
+      }
+    });
+
+    status.textContent = 'Showing ' + quakes.length + ' earthquakes from your MySQL database.';
+  } catch (error) {
+    console.error('Globe loading failed:', error);
+    status.textContent = 'Could not load earthquakes: ' + error.message;
+  }
+}
+
+async function loadRegionsDropdown() {
+  const res = await fetch(API + '/regions');
+  const regions = await res.json();
+  const filterSel = document.getElementById('filterRegion');
+  const newSel = document.getElementById('newRegion');
+  filterSel.innerHTML = '<option value="">All regions</option>' + regions.map(r=>`<option value="${r.RegionID}">${r.RegionName}</option>`).join('');
+  newSel.innerHTML = regions.map(r=>`<option value="${r.RegionID}">${r.RegionName}</option>`).join('');
+}
+
+async function loadEarthquakes() {
+  const minMag = document.getElementById('filterMinMag').value;
+  const regionId = document.getElementById('filterRegion').value;
+  const params = new URLSearchParams();
+  if (minMag) params.set('minMagnitude', minMag);
+  if (regionId) params.set('regionId', regionId);
+  const res = await fetch(API + '/earthquakes?' + params.toString());
+  const rows = await res.json();
+  const canDelete = ME && ME.role === 'Admin';
+  document.getElementById('quakeTable').innerHTML = rows.map(r => `
+    <tr>
+      <td>${r.EarthquakeID}</td>
+      <td>${new Date(r.EventDateTime).toLocaleString()}</td>
+      <td>${r.Magnitude}</td>
+      <td>${r.Depth_km}</td>
+      <td>${r.RegionName||'-'}</td>
+      <td>${r.CountryName||'-'}</td>
+      <td>${canDelete ? `<button class="danger" onclick="deleteEarthquake(${r.EarthquakeID})">Delete</button>` : ''}</td>
+    </tr>`).join('');
+}
+
+async function addEarthquake() {
+  const body = {
+    eventDateTime: document.getElementById('newDateTime').value.replace('T',' ') + ':00',
+    magnitude: parseFloat(document.getElementById('newMagnitude').value),
+    magnitudeType: 'Mw',
+    depthKm: parseFloat(document.getElementById('newDepth').value),
+    latitude: parseFloat(document.getElementById('newLat').value),
+    longitude: parseFloat(document.getElementById('newLng').value),
+    sourceAgency: 'Manual Entry',
+    regionId: document.getElementById('newRegion').value,
+  };
+  const res = await fetch(API + '/earthquakes', { method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify(body) });
+  const data = await res.json();
+  const msg = document.getElementById('addMsg');
+  if (res.ok) { msg.innerHTML = '<div class="msg ok">Added earthquake #' + data.earthquakeId + '</div>'; loadEarthquakes(); }
+  else { msg.innerHTML = '<div class="msg err">' + (data.error||'Failed') + '</div>'; }
+}
+
+async function deleteEarthquake(id) {
+  if (!confirm('Delete earthquake #' + id + '?')) return;
+  const res = await fetch(API + '/earthquakes/' + id, { method:'DELETE', headers: authHeaders() });
+  if (res.ok) loadEarthquakes();
+  else alert('Delete failed — ' + (await res.json()).error);
+}
+
+async function loadReports() {
+  const risk = await (await fetch(API + '/reports/region-risk')).json();
+  document.getElementById('riskTable').innerHTML = risk.map(r => `
+    <tr><td>${r.RegionName}</td><td>${r.CountryName}</td><td>${r.RiskScore}</td><td><span class="badge ${r.RiskLevel.replace(' ','')}">${r.RiskLevel}</span></td></tr>`).join('');
+
+  const avg = await (await fetch(API + '/reports/above-average-risk')).json();
+  document.getElementById('aboveAvgList').innerHTML = avg.map(r => `<li>${r.RegionName}</li>`).join('');
+
+  const stats = await (await fetch(API + '/reports/stats-by-region')).json();
+  document.getElementById('statsTable').innerHTML = stats.map(r => `
+    <tr><td>${r.RegionName}</td><td>${r.event_count}</td><td>${r.avg_magnitude}</td></tr>`).join('');
+}
+
+async function loadViews() {
+  const overview = await (await fetch(API + '/views/earthquake-overview')).json();
+  document.getElementById('viewOverview').innerHTML = overview.map(r => `
+    <tr><td>${r.EarthquakeID}</td><td>${new Date(r.EventDateTime).toLocaleString()}</td><td>${r.Magnitude}</td><td>${r.Depth_km}</td><td>${r.RegionName}</td><td>${r.CountryName}</td></tr>`).join('');
+
+  const highRisk = await (await fetch(API + '/views/high-risk-regions')).json();
+  document.getElementById('viewHighRisk').innerHTML = highRisk.map(r => `
+    <tr><td>${r.RegionName}</td><td>${r.CountryName}</td><td>${r.RiskScore}</td><td><span class="badge ${r.RiskLevel.replace(' ','')}">${r.RiskLevel}</span></td></tr>`).join('');
+}
+
+async function loadAdmin() {
+  const locked = document.getElementById('adminLocked');
+  const unlocked = document.getElementById('adminUnlocked');
+  if (!ME || (ME.role !== 'Admin' && ME.role !== 'Responder')) {
+    locked.classList.remove('hidden'); unlocked.classList.add('hidden'); return;
+  }
+  locked.classList.add('hidden'); unlocked.classList.remove('hidden');
+  if (ME.role !== 'Admin') document.getElementById('auditPanel').classList.add('hidden');
+  else document.getElementById('auditPanel').classList.remove('hidden');
+
+  const resources = await (await fetch(API + '/resources')).json();
+  document.getElementById('allocResource').innerHTML = resources.map(r => `<option value="${r.ResourceID}">${r.ResourceType} — ${r.Location} (${r.Quantity} avail.)</option>`).join('');
+
+  const quakes = await (await fetch(API + '/earthquakes')).json();
+  document.getElementById('allocEarthquake').innerHTML = quakes.map(r => `<option value="${r.EarthquakeID}">#${r.EarthquakeID} — M${r.Magnitude} ${r.RegionName||''}</option>`).join('');
+
+  if (ME.role === 'Admin') {
+    const res = await fetch(API + '/audit-log', { headers: authHeaders() });
+    if (res.ok) {
+      const log = await res.json();
+      document.getElementById('auditTable').innerHTML = log.map(r => `
+        <tr><td>${r.LogID}</td><td>${r.EarthquakeID}</td><td>${r.Magnitude}</td><td>${new Date(r.LoggedAt).toLocaleString()}</td><td>${r.Note}</td></tr>`).join('');
+    }
+  }
+}
+
+async function allocateResource() {
+  const body = {
+    resourceId: document.getElementById('allocResource').value,
+    earthquakeId: document.getElementById('allocEarthquake').value,
+    quantity: parseInt(document.getElementById('allocQty').value, 10),
+  };
+  const res = await fetch(API + '/allocate-resource', { method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()}, body: JSON.stringify(body) });
+  const data = await res.json();
+  const msg = document.getElementById('allocMsg');
+  if (res.ok) { msg.innerHTML = '<div class="msg ok">Resource allocated (stock reduced via stored procedure).</div>'; }
+  else { msg.innerHTML = '<div class="msg err">' + (data.error||'Failed') + '</div>'; }
+}
+
+updateAuthUI();
+loadDashboard();
+</script>
+</body>
+</html>
